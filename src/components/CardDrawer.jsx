@@ -11,11 +11,10 @@ const CartDrawer = () => {
     getCartCount,
     isDrawerOpen,
     setIsDrawerOpen,
-    setIsCheckoutOpen
+    openCheckout,
   } = useCart();
   const [activeIndex, setActiveIndex] = useState(0);
   const currentIndex = cart.length === 0 ? 0 : Math.min(activeIndex, cart.length - 1);
-
   if (!isDrawerOpen) return null;
 
   return (
@@ -149,10 +148,7 @@ const CartDrawer = () => {
                 </div>
                 
                 <button
-                  onClick={() => {
-                    setIsDrawerOpen(false);
-                    setIsCheckoutOpen(true);
-                  }}
+                  onClick={openCheckout} 
                   style={styles.checkoutButton}
                 >
                   Enviar mi pedido
@@ -260,6 +256,7 @@ const styles = {
   quantityControls: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '8px',
     marginTop: '8px'
   },

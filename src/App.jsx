@@ -1,11 +1,10 @@
-
 import Hero from "./components/Hero";
 import BrandConcept from "./components/BrandConcept";
 import ProductList from "./components/ProductList";
 import { CartProvider } from './store/CartProvider.jsx';
 import CartFloatingButton from "./components/CartFloatingButton";
 import CartDrawer from "./components/CardDrawer.jsx";
-
+import CheckoutModal from "./components/CheckoutModal.jsx"; // ← AGREGAR
 
 function App() {
   return (
@@ -16,6 +15,7 @@ function App() {
         <ProductList />
         <CartFloatingButton />
         <CartDrawer />
+        <CheckoutModal />  {/* ← AGREGAR */}
       </main>
     </CartProvider>
   );
