@@ -29,6 +29,7 @@
     font-size: 16px;
   }
 }
+@import url('https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;1,300&family=Barlow+Condensed:wght@400;600;700;800;900&display=swap');
 
 @media (prefers-color-scheme: dark) {
   :root {

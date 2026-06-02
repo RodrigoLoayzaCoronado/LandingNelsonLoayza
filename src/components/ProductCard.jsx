@@ -1,16 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useCart } from '../store/useCart';
+import { useState, useEffect, useCallback } from "react";
+import { useCart } from "../store/useCart";
+import { counterService } from "../services/LikeService.js";
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
-  const [selectedSize, setSelectedSize] = useState('');
+  const [selectedSize, setSelectedSize] = useState("");
+  
+  // [NUEVO] Estado para almacenar el total global de likes desde la API
+  const [globalLikes, setGlobalLikes] = useState(0);
+
   const [isLiked, setIsLiked] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === "undefined") return false;
     try {
-      const savedLikes = localStorage.getItem('product_likes');
+      const savedLikes = localStorage.getItem("product_likes");
       return savedLikes ? JSON.parse(savedLikes).includes(product.id) : false;
     } catch (error) {
-      console.warn('Error reading liked products from localStorage:', error);
+      console.warn("Error reading liked products from localStorage:", error);
       return false;
     }
   });
@@ -20,102 +25,163 @@ const ProductCard = ({ product }) => {
   const hasSizes = Array.isArray(product.sizes) && product.sizes.length > 0;
   const sizes = hasSizes ? product.sizes : [];
 
+  // [NUEVO] Cargar los likes globales desde el servicio al montar la tarjeta
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchInitialLikes() {
+      const likes = await counterService.getLikes(product.id);
+      if (isMounted) {
+        setGlobalLikes(likes);
+      }
+    }
+
+    fetchInitialLikes();
+    return () => { isMounted = false; };
+  }, [product.id]);
+
   // Sincronizar con cambios de localStorage desde otras pestañas
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key === 'product_likes') {
+      if (e.key === "product_likes") {
         try {
           const newLikes = e.newValue ? JSON.parse(e.newValue) : [];
           setIsLiked(newLikes.includes(product.id));
         } catch (error) {
-          console.warn('Error parsing likes from storage event:', error);
+          console.warn("Error parsing likes from storage event:", error);
         }
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, [product.id]);
 
-  const handleLike = useCallback(() => {
-    const savedLikes = localStorage.getItem('product_likes');
+  // [MODIFICADO] Lógica del Like sincronizada de manera optimista con CounterAPI
+  const handleLike = useCallback(async () => {
+    const savedLikes = localStorage.getItem("product_likes");
     let likes = savedLikes ? JSON.parse(savedLikes) : [];
-    
-    if (isLiked) {
-      likes = likes.filter(id => id !== product.id);
+
+    const previousIsLiked = isLiked;
+
+    // Actualización optimista instantánea en la interfaz
+    setIsLiked(!previousIsLiked);
+    setGlobalLikes((prev) => (previousIsLiked ? Math.max(0, prev - 1) : prev + 1));
+
+    // Guardar en el LocalStorage de la sesión local
+    if (previousIsLiked) {
+      likes = likes.filter((id) => id !== product.id);
     } else {
       likes.push(product.id);
     }
-    
-    localStorage.setItem('product_likes', JSON.stringify(likes));
-    setIsLiked(!isLiked);
+    localStorage.setItem("product_likes", JSON.stringify(likes));
+
+    // Sincronización en segundo plano con el servidor
+    try {
+      let updatedValue;
+      if (previousIsLiked) {
+        updatedValue = await counterService.decrementLikes(product.id);
+      } else {
+        updatedValue = await counterService.incrementLikes(product.id);
+      }
+      
+      // Sincronizar el estado final real devuelto por la API
+      setGlobalLikes(updatedValue);
+    } catch (error) {
+      console.error("Error al sincronizar el me gusta con CounterAPI:", error);
+    }
   }, [isLiked, product.id]);
 
   const handleAddToCart = () => {
     if (hasSizes && !selectedSize) {
-      alert('Por favor selecciona una talla');
+      alert("Por favor selecciona una talla");
       return;
     }
 
-    const sizeToAdd = hasSizes ? selectedSize : (product.defaultSize || 'Única');
+    const sizeToAdd = hasSizes ? selectedSize : product.defaultSize || "Única";
     addToCart(product, sizeToAdd, 1);
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 2000);
   };
 
   // Detectar si es mobile
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-
+  const isMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+  //Carrusel de imágenes
+  const [currentImage, setCurrentImage] = useState(0);
   return (
-    <div 
-      className="product-card" 
+    <div
+      className="product-card"
       style={{
         ...styles.card,
-        transform: !isMobile && isHovered ? 'translateY(-8px)' : 'translateY(0)',
-        boxShadow: !isMobile && isHovered 
-          ? '0 20px 40px rgba(0,0,0,0.3), 0 0 20px rgba(229, 57, 53, 0.3)' 
-          : '0 10px 20px rgba(0,0,0,0.2)'
+        transform:
+          !isMobile && isHovered ? "translateY(-8px)" : "translateY(0)",
+        boxShadow:
+          !isMobile && isHovered
+            ? "0 20px 40px rgba(0,0,0,0.3), 0 0 20px rgba(229, 57, 53, 0.3)"
+            : "0 10px 20px rgba(0,0,0,0.2)",
       }}
       onMouseEnter={() => !isMobile && setIsHovered(true)}
       onMouseLeave={() => !isMobile && setIsHovered(false)}
     >
       {/* Badge "Limited" o "Hot" */}
-      {product.isLimited && (
-        <div style={styles.limitedBadge}>
-          🔥 LIMITED
-        </div>
-      )}
+      {product.isLimited && <div style={styles.limitedBadge}>🔥 LIMITED</div>}
 
       {/* Imagen del producto */}
       <div style={styles.imageContainer}>
-        <img 
-          src={product.image} 
+        <img
+          src={product.images[currentImage]}
           alt={product.name}
           style={{
             ...styles.image,
-            transform: !isMobile && isHovered ? 'scale(1.05)' : 'scale(1)'
+            transform: !isMobile && isHovered ? "scale(1.05)" : "scale(1)",
           }}
         />
-        
+        {product.images.length > 1 && (
+          <div style={styles.carouselControls}>
+            <button
+              onClick={() =>
+                setCurrentImage((prev) =>
+                  prev === 0 ? product.images.length - 1 : prev - 1,
+                )
+              }
+              style={styles.arrowButton}
+            >
+              ‹
+            </button>
+
+            <button
+              onClick={() =>
+                setCurrentImage((prev) =>
+                  prev === product.images.length - 1 ? 0 : prev + 1,
+                )
+              }
+              style={styles.arrowButton}
+            >
+              ›
+            </button>
+          </div>
+        )}
+
         {/* Overlay de gradiente al hover (solo desktop) */}
         {!isMobile && (
-          <div style={{
-            ...styles.imageOverlay,
-            opacity: isHovered ? 0.6 : 0
-          }} />
+          <div
+            style={{
+              ...styles.imageOverlay,
+              opacity: isHovered ? 0.6 : 0,
+            }}
+          />
         )}
-        
+
         {/* Botón Like */}
-        <button 
+        <button
           onClick={handleLike}
           style={styles.likeButton}
           aria-label="Me gusta"
         >
-          {isLiked ? '❤️' : '♡'}
+          <span style={{ color: isLiked ? "#ff6b6b" : "white" }}>{isLiked ? "❤️" : "♡"}</span>
+          <span style={styles.likeCount}>{globalLikes}</span>
         </button>
-        
       </div>
-      
 
       {/* Información del producto */}
       <div style={styles.info}>
@@ -132,13 +198,13 @@ const ProductCard = ({ product }) => {
           <div style={styles.sizeSection}>
             <label style={styles.sizeLabel}>Size</label>
             <div style={styles.sizeButtons}>
-              {sizes.map(size => (
+              {sizes.map((size) => (
                 <button
                   key={size}
                   onClick={() => setSelectedSize(size)}
                   style={{
                     ...styles.sizeButton,
-                    ...(selectedSize === size && styles.sizeButtonSelected)
+                    ...(selectedSize === size && styles.sizeButtonSelected),
                   }}
                 >
                   {size}
@@ -149,18 +215,21 @@ const ProductCard = ({ product }) => {
         ) : (
           <div style={styles.staticSizeContainer}>
             <span style={styles.staticSizeLabel}>Size</span>
-            <span style={styles.staticSize}>{product.defaultSize || 'Unique'}</span>
+            <span style={styles.staticSize}>
+              {product.defaultSize || "Unique"}
+            </span>
           </div>
         )}
 
         {/* Botón Lo Quiero */}
-        <button 
+        <button
           onClick={handleAddToCart}
           style={{
             ...styles.buyButton,
-            background: !isMobile && isHovered 
-              ? 'linear-gradient(135deg, #00b8b8, #c2185b)'
-              : 'linear-gradient(135deg, #00b8b8, #006161)'
+            background:
+              !isMobile && isHovered
+                ? "linear-gradient(135deg, #00b8b8, #c2185b)"
+                : "linear-gradient(135deg, #00b8b8, #006161)",
           }}
         >
           <span style={styles.buttonText}>Lo Quiero ♡</span>
@@ -180,224 +249,257 @@ const ProductCard = ({ product }) => {
 
 const styles = {
   card: {
-    backgroundColor: '#1a0015', 
+    backgroundColor: "#1a0015",
     backgroundImage: `
       radial-gradient(circle at 20% 30%, #5f004b 0%, transparent 20%),
       radial-gradient(circle at 75% 20%, #00b8b8 0%, transparent 35%),
       radial-gradient(circle at 20% 80%, #610030 0%, transparent 20%),
       radial-gradient(circle at 85% 70%, #0e5d63 0%, transparent 25%)
     `,
-    backgroundRepeat: 'no-repeat',
-    borderRadius: '16px',
-    overflow: 'hidden',
-    boxShadow: '0 10px 20px rgba(0,0,0,0.2)',
-    transition: 'all 0.3s ease',
-    cursor: 'pointer',
-    position: 'relative',
-    border: '1px solid rgba(255,255,255,0.1)',
-    width: '100%',
-    margin: '0 auto',
+    backgroundRepeat: "no-repeat",
+    borderRadius: "16px",
+    overflow: "hidden",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.2)",
+    transition: "all 0.3s ease",
+    cursor: "pointer",
+    position: "relative",
+    border: "1px solid rgba(255,255,255,0.1)",
+    width: "100%",
+    margin: "0 auto",
   },
   limitedBadge: {
-    position: 'absolute',
-    top: '12px',
-    left: '12px',
-    background: 'linear-gradient(135deg, #ff6b6b, #e53935)',
-    color: 'white',
-    padding: '4px 10px',
-    borderRadius: '20px',
-    fontSize: '10px',
-    fontWeight: 'bold',
-    letterSpacing: '1px',
+    position: "absolute",
+    top: "12px",
+    left: "12px",
+    background: "linear-gradient(135deg, #ff6b6b, #e53935)",
+    color: "white",
+    padding: "4px 10px",
+    borderRadius: "20px",
+    fontSize: "10px",
+    fontWeight: "bold",
+    letterSpacing: "1px",
     zIndex: 2,
-    boxShadow: '0 2px 8px rgba(229,57,53,0.3)'
+    boxShadow: "0 2px 8px rgba(229,57,53,0.3)",
   },
   imageContainer: {
-    position: 'relative',
-    paddingTop: '100%',
-    margin: '16px',
-    paddingBottom: '50px',
-    overflow: 'hidden',
+    position: "relative",
+    paddingTop: "100%",
+    margin: "16px",
+    paddingBottom: "50px",
+    overflow: "hidden",
     opacity: 0.95,
   },
   image: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    transition: 'transform 0.3s ease'
+    width: "100%",
+    height: "100%",
+    objectFit: "contain",
+    transition: "transform 0.3s ease",
   },
   imageOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
-    width: '100%',
-    height: '100%',
-    background: 'linear-gradient(135deg, rgba(229,57,53,0.4), rgba(0,0,0,0.6))',
-    transition: 'opacity 0.3s ease',
-    pointerEvents: 'none'
+    width: "100%",
+    height: "100%",
+    background: "linear-gradient(135deg, rgba(229,57,53,0.4), rgba(0,0,0,0.6))",
+    transition: "opacity 0.3s ease",
+    pointerEvents: "none",
   },
   likeButton: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    background: 'rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255,255,255,0.2)',
-    borderRadius: '50%',
-    width: '36px',
-    height: '36px',
-    fontSize: '20px',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
+    position: "absolute",
+    top: "12px",
+    right: "12px",
+    background: "rgba(0,0,0,0.6)",
+    backdropFilter: "blur(10px)",
+    border: "1px solid rgba(255,255,255,0.2)",
+    borderRadius: "20px",
+    padding: "0 10px",
+    height: "36px",
+    minWidth: "48px",
+    fontSize: "18px",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
     zIndex: 2,
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+  },
+ 
+  likeCount: {
+    fontSize: "12px",
+    fontWeight: "bold",
+    fontFamily: "monospace",
+    color: "#e0e0e0",
   },
   bidLabel: {
-    display: 'block',
-    fontSize: '9px',
-    color: '#999',
-    letterSpacing: '1px',
-    marginBottom: '2px',
-    textTransform: 'uppercase'
+    display: "block",
+    fontSize: "9px",
+    color: "#999",
+    letterSpacing: "1px",
+    marginBottom: "2px",
+    textTransform: "uppercase",
   },
   bidPrice: {
-    display: 'block',
-    fontSize: '16px',
-    fontWeight: 'bold',
-    color: '#ff6b6b',
-    fontFamily: 'monospace'
+    display: "block",
+    fontSize: "16px",
+    fontWeight: "bold",
+    color: "#ff6b6b",
+    fontFamily: "monospace",
   },
   info: {
-    padding: '16px'
-    
+    padding: "16px",
   },
   titleSection: {
-    marginBottom: '14px',
-    border: '1px solid rgba(255,255,255,0.1)',
-    padding: '6px 10px',
-    borderRadius: '10px',
-    background: 'rgba(0,0,0,0.3)',
-    backdropFilter: 'blur(10px)',
+    marginBottom: "14px",
+    border: "1px solid rgba(255,255,255,0.1)",
+    padding: "6px 10px",
+    borderRadius: "10px",
+    background: "rgba(0,0,0,0.3)",
+    backdropFilter: "blur(10px)",
   },
   title: {
-    fontSize: '16px',
-    fontWeight: 'bold',
-    margin: '0 0 4px 0',
-    color: '#fff',
-    letterSpacing: '-0.5px'
+    fontSize: "16px",
+    fontWeight: "bold",
+    margin: "0 0 4px 0",
+    color: "#fff",
+    letterSpacing: "-0.5px",
   },
   creator: {
-    fontSize: '11px',
-    color: '#888',
-    display: 'block'
+    fontSize: "11px",
+    color: "#888",
+    display: "block",
   },
   sizeSection: {
-    marginBottom: '16px'
+    marginBottom: "16px",
   },
   sizeLabel: {
-    display: 'block',
-    fontSize: '10px',
-    color: '#999',
-    marginBottom: '6px',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '1px'
+    display: "block",
+    fontSize: "10px",
+    color: "#999",
+    marginBottom: "6px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
   },
   sizeButtons: {
-    display: 'flex',
-    gap: '6px',
-    flexWrap: 'wrap'
+    display: "flex",
+    gap: "6px",
+    flexWrap: "wrap",
   },
   sizeButton: {
-    minWidth: '36px',
-    height: '36px',
-    padding: '0 8px',
-    border: '1px solid rgba(255,255,255,0.2)',
-    background: 'rgba(255,255,255,0.05)',
-    color: '#fff',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    transition: 'all 0.2s ease',
-    fontFamily: 'monospace'
+    minWidth: "36px",
+    height: "36px",
+    padding: "0 8px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    background: "rgba(255,255,255,0.05)",
+    color: "#fff",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "bold",
+    transition: "all 0.2s ease",
+    fontFamily: "monospace",
   },
   sizeButtonSelected: {
-    background: 'linear-gradient(135deg, #e53935, #ff6b6b)',
-    borderColor: 'transparent',
-    boxShadow: '0 0 10px rgba(229,57,53,0.5)'
+    background: "linear-gradient(135deg, #e53935, #ff6b6b)",
+    borderColor: "transparent",
+    boxShadow: "0 0 10px rgba(229,57,53,0.5)",
   },
   staticSizeContainer: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-    padding: '6px 0'
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "16px",
+    padding: "6px 0",
   },
   staticSizeLabel: {
-    fontSize: '10px',
-    color: '#999',
-    textTransform: 'uppercase',
-    letterSpacing: '1px'
+    fontSize: "10px",
+    color: "#999",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
   },
   staticSize: {
-    fontSize: '12px',
-    color: '#fff',
-    fontWeight: 'bold',
-    fontFamily: 'monospace'
+    fontSize: "12px",
+    color: "#fff",
+    fontWeight: "bold",
+    fontFamily: "monospace",
   },
   buyButton: {
-    width: '100%',
-    padding: '12px',
-    border: 'solid rgba(255,255,255,0.2)',
-    borderRadius: '10px',
-    fontSize: '24px',
-    fontWeight: 'bold',
-    transition: 'all 0.3s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: "100%",
+    padding: "12px",
+    border: "solid rgba(255,255,255,0.2)",
+    borderRadius: "10px",
+    fontSize: "24px",
+    fontWeight: "bold",
+    transition: "all 0.3s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttonText: {
-    letterSpacing: '1px',
-    fontSize: '14px'
+    letterSpacing: "1px",
+    fontSize: "14px",
   },
   buttonArrow: {
-    fontSize: '16px',
-    transition: 'transform 0.3s ease'
+    fontSize: "16px",
+    transition: "transform 0.3s ease",
   },
   notification: {
-    position: 'absolute',
-    bottom: '80px',
-    left: '16px',
-    right: '16px',
-    background: 'linear-gradient(135deg, #4caf50, #45a049)',
-    color: 'white',
-    padding: '8px',
-    borderRadius: '8px',
-    fontSize: '12px',
-    textAlign: 'center',
-    animation: 'slideUp 0.3s ease',
+    position: "absolute",
+    bottom: "80px",
+    left: "16px",
+    right: "16px",
+    background: "linear-gradient(135deg, #4caf50, #45a049)",
+    color: "white",
+    padding: "8px",
+    borderRadius: "8px",
+    fontSize: "12px",
+    textAlign: "center",
+    animation: "slideUp 0.3s ease",
     zIndex: 3,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px'
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
   },
   notificationIcon: {
-    fontSize: '14px',
-    fontWeight: 'bold'
-  }
+    fontSize: "14px",
+    fontWeight: "bold",
+  },
+  carouselControls: {
+  position: 'absolute',
+  top: '50%',
+  left: 0,
+  right: 0,
+  display: 'flex',
+  justifyContent: 'space-between',
+  transform: 'translateY(-50%)',
+  padding: '0 10px',
+  zIndex: 3
+},
+
+arrowButton: {
+  width: '36px',
+  height: '36px',
+  borderRadius: '50%',
+  border: 'none',
+  background: 'rgba(0,0,0,0.6)',
+  color: '#fff',
+  cursor: 'pointer',
+  fontSize: '20px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+},
 };
 
 // Agregar keyframes
-if (typeof document !== 'undefined') {
+if (typeof document !== "undefined") {
   const styleSheet = document.createElement("style");
   styleSheet.textContent = `
     @keyframes slideUp {

@@ -233,8 +233,7 @@ export default function Hero() {
             color: "#7a7f85",
             margin: 0,
           }}>
-            Velocidad, precisión y estilo en cada curva. Apoya a Oscar Crespo
-            y lleva el espíritu de la pista contigo — colección oficial 2026.
+            Colección oficial 2026.
           </p>
         </div>
 
@@ -264,9 +263,11 @@ export default function Hero() {
 
         {/* CTA */}
         <div className="hero-cta">
-          <button className="merch-btn">
+          <a href="#products">
+            <button className="merch-btn">
             🏁&nbsp; Quiero el Merch
-          </button>
+            </button>
+          </a>
           <p style={{
             textAlign: "center",
             fontSize: "0.65rem",

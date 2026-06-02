@@ -4,8 +4,8 @@ import ProductList from "./components/ProductList";
 import { CartProvider } from './store/CartProvider.jsx';
 import CartFloatingButton from "./components/CartFloatingButton";
 import CartDrawer from "./components/CardDrawer.jsx";
-import CheckoutModal from "./components/CheckoutModal.jsx"; // ← AGREGAR
-
+import CheckoutModal from "./components/CheckoutModal.jsx";
+import Footer from "./components/Footer.jsx";
 function App() {
   return (
     <CartProvider>
@@ -15,7 +15,8 @@ function App() {
         <ProductList />
         <CartFloatingButton />
         <CartDrawer />
-        <CheckoutModal />  {/* ← AGREGAR */}
+        <CheckoutModal /> 
+        <Footer />
       </main>
     </CartProvider>
   );
