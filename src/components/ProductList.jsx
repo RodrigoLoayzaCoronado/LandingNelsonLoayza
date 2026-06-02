@@ -58,7 +58,7 @@ export default function ProductList() {
   return (
     <section id="products" style={styles.section}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Colección oficial</h2>
+        <h2 style={styles.title}>COLECCIÓN OFICIAL</h2>
         <p style={styles.subtitle}>Diseños exclusivos para los amantes del automovilismo.</p>
       </div>
       <div style={styles.grid}>

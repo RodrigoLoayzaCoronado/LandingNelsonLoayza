@@ -1,14 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useCart } from "../store/useCart";
-import { counterService } from "../services/LikeService.js";
+
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
   const [selectedSize, setSelectedSize] = useState("");
-  
-  // [NUEVO] Estado para almacenar el total global de likes desde la API
-  const [globalLikes, setGlobalLikes] = useState(0);
-
   const [isLiked, setIsLiked] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -24,21 +20,6 @@ const ProductCard = ({ product }) => {
 
   const hasSizes = Array.isArray(product.sizes) && product.sizes.length > 0;
   const sizes = hasSizes ? product.sizes : [];
-
-  // [NUEVO] Cargar los likes globales desde el servicio al montar la tarjeta
-  useEffect(() => {
-    let isMounted = true;
-
-    async function fetchInitialLikes() {
-      const likes = await counterService.getLikes(product.id);
-      if (isMounted) {
-        setGlobalLikes(likes);
-      }
-    }
-
-    fetchInitialLikes();
-    return () => { isMounted = false; };
-  }, [product.id]);
 
   // Sincronizar con cambios de localStorage desde otras pestañas
   useEffect(() => {
@@ -57,39 +38,18 @@ const ProductCard = ({ product }) => {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [product.id]);
 
-  // [MODIFICADO] Lógica del Like sincronizada de manera optimista con CounterAPI
-  const handleLike = useCallback(async () => {
+  const handleLike = useCallback(() => {
     const savedLikes = localStorage.getItem("product_likes");
     let likes = savedLikes ? JSON.parse(savedLikes) : [];
 
-    const previousIsLiked = isLiked;
-
-    // Actualización optimista instantánea en la interfaz
-    setIsLiked(!previousIsLiked);
-    setGlobalLikes((prev) => (previousIsLiked ? Math.max(0, prev - 1) : prev + 1));
-
-    // Guardar en el LocalStorage de la sesión local
-    if (previousIsLiked) {
+    if (isLiked) {
       likes = likes.filter((id) => id !== product.id);
     } else {
       likes.push(product.id);
     }
-    localStorage.setItem("product_likes", JSON.stringify(likes));
 
-    // Sincronización en segundo plano con el servidor
-    try {
-      let updatedValue;
-      if (previousIsLiked) {
-        updatedValue = await counterService.decrementLikes(product.id);
-      } else {
-        updatedValue = await counterService.incrementLikes(product.id);
-      }
-      
-      // Sincronizar el estado final real devuelto por la API
-      setGlobalLikes(updatedValue);
-    } catch (error) {
-      console.error("Error al sincronizar el me gusta con CounterAPI:", error);
-    }
+    localStorage.setItem("product_likes", JSON.stringify(likes));
+    setIsLiked(!isLiked);
   }, [isLiked, product.id]);
 
   const handleAddToCart = () => {
@@ -178,8 +138,7 @@ const ProductCard = ({ product }) => {
           style={styles.likeButton}
           aria-label="Me gusta"
         >
-          <span style={{ color: isLiked ? "#ff6b6b" : "white" }}>{isLiked ? "❤️" : "♡"}</span>
-          <span style={styles.likeCount}>{globalLikes}</span>
+          {isLiked ? "❤️" : "♡"}
         </button>
       </div>
 
@@ -315,11 +274,10 @@ const styles = {
     background: "rgba(0,0,0,0.6)",
     backdropFilter: "blur(10px)",
     border: "1px solid rgba(255,255,255,0.2)",
-    borderRadius: "20px",
-    padding: "0 10px",
+    borderRadius: "50%",
+    width: "36px",
     height: "36px",
-    minWidth: "48px",
-    fontSize: "18px",
+    fontSize: "20px",
     cursor: "pointer",
     transition: "all 0.3s ease",
     zIndex: 2,
@@ -327,14 +285,6 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "5px",
-  },
- 
-  likeCount: {
-    fontSize: "12px",
-    fontWeight: "bold",
-    fontFamily: "monospace",
-    color: "#e0e0e0",
   },
   bidLabel: {
     display: "block",
