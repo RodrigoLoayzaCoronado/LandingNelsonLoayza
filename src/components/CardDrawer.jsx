@@ -15,6 +15,16 @@ const CartDrawer = () => {
   } = useCart();
   const [activeIndex, setActiveIndex] = useState(0);
   const currentIndex = cart.length === 0 ? 0 : Math.min(activeIndex, cart.length - 1);
+  console.log("Contenido actual del carrito:", cart);
+  const handleQuantityChange = (id, size, newQuantity) => {
+    if (newQuantity > 20) {
+      alert("¡Lo sentimos! No puedes agregar más de 20 unidades de un mismo producto.");
+      return; // Bloquea la ejecución si supera los 20
+    }
+    // Si la validación pasa, actualiza normalmente
+    updateQuantity(id, size, newQuantity);
+  };
+  
   if (!isDrawerOpen) return null;
 
   return (
@@ -65,11 +75,13 @@ const CartDrawer = () => {
                         transform: `translateX(${(index - currentIndex) * 100}%)`
                       }}
                     >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        style={styles.slideImage}
-                      />
+                      {(item.images?.[0] ?? item.image) ? (
+                        <img
+                          src={item.images?.[0] ?? item.image}
+                          alt={item.name}
+                          style={styles.slideImage}
+                        />
+                      ) : null}
                       <div style={styles.slideInfo}>
                         <h4 style={styles.itemName}>{item.name}</h4>
                         <p style={styles.itemSize}>Talla: {item.size}</p>
@@ -104,11 +116,13 @@ const CartDrawer = () => {
 
               {cart.map((item) => (
                 <div key={`${item.id}-${item.size}`} style={styles.cartItem}>
-                  <img 
-                    src={item.image} 
-                    alt={item.name}
-                    style={styles.itemImage}
-                  />
+                  {(item.image ?? item.images?.[0]) ? (
+                    <img
+                      src={item.image ?? item.images?.[0]}
+                      alt={item.name}
+                      style={styles.itemImage}
+                    />
+                  ) : null}
                   
                   <div style={styles.itemInfo}>
                     <h4 style={styles.itemName}>{item.name}</h4>
@@ -124,8 +138,13 @@ const CartDrawer = () => {
                       </button>
                       <span style={styles.quantity}>{item.quantity}</span>
                       <button
-                        onClick={() => updateQuantity(item.id, item.size, item.quantity + 1)}
-                        style={styles.quantityButton}
+                        onClick={() => handleQuantityChange(item.id, item.size, item.quantity + 1)}
+                        disabled={item.quantity >= 20}
+                        style={{
+                          ...styles.quantityButton,
+                          opacity: item.quantity >= 20 ? 0.5 : 1,
+                          cursor: item.quantity >= 20 ? 'not-allowed' : 'pointer'
+                        }}
                       >
                         +
                       </button>
@@ -213,9 +232,9 @@ const styles = {
   },
   emptyCart: {
     textAlign: 'center',
-    padding: '40px 20px',
+    padding: '20px',
     color: '#999',
-    fontSize: '48px'
+    fontSize: '28px'
   },
   cartItem: {
     display: 'flex',
@@ -228,10 +247,11 @@ const styles = {
     position: 'relative'
   },
   itemImage: {
-    width: '80px',
-    height: '80px',
+    width: '70px',
+    height: '70px',
     objectFit: 'cover',
-    borderRadius: '8px'
+    borderRadius: '8px',
+    flexShrink: 0,
   },
   itemInfo: {
     flex: 1
@@ -263,10 +283,13 @@ const styles = {
   quantityButton: {
     width: '28px',
     height: '28px',
-    border: '1px solid #00b8b8',
+    borderStyle: 'solid',
+    borderWidth: '1px',
+    borderColor: '#00b8b8',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '16px'
+    fontSize: '16px',
+    backgroundColor: 'transparent',
   },
   quantity: {
     minWidth: '24px',
@@ -302,7 +325,7 @@ const styles = {
     flex: 1,
     overflow: 'hidden',
     position: 'relative',
-    height: '180px'
+    height: '140px'
   },
   slide: {
     position: 'absolute',
@@ -350,7 +373,7 @@ const styles = {
   },
   activeDot: {
     background: 'linear-gradient(135deg, #00b8b8, #006161)',
-    borderColor: 'linear-gradient(135deg, #00b8b8, #006161)'
+    borderColor: '#00b8b8'
   },
   footer: {
     marginTop: '20px',

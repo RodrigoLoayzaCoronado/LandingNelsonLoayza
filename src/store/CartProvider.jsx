@@ -29,12 +29,19 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState(() => loadFromStorage(CART_KEY, []));
   useEffect(() => { saveToStorage(CART_KEY, cart); }, [cart]);
 
-  const addToCart = useCallback((product, size = null) => {
+  const addToCart = useCallback((product, size = null, quantity = 1) => {
+    const image = product.images?.[0] ?? product.image ?? '';
+    const images = product.images ?? (product.image ? [product.image] : []);
+
     setCart(prev => {
       const key = size ? `${product.id}_${size}` : `${product.id}`;
       const exists = prev.find(i => i._key === key);
       if (exists) {
-        return prev.map(i => i._key === key ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i =>
+          i._key === key
+            ? { ...i, quantity: i.quantity + quantity, image, images }
+            : i,
+        );
       }
       return [...prev, {
         _key    : key,
@@ -42,9 +49,10 @@ export function CartProvider({ children }) {
         name    : product.name,
         price   : product.price,
         currency: product.currency ?? 'Bs.',
-        image   : product.image,
-        size    : size,
-        quantity: 1,
+        image,
+        images,
+        size,
+        quantity,
       }];
     });
   }, []);
